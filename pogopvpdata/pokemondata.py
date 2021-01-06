@@ -1,9 +1,10 @@
 import logging
 import time
 import requests
-from . import Pokemon, EnumParser, logger
+from . import Pokemon, EnumParser
 from enum import Enum
 
+logger = logging.getLogger(__name__)
 
 EnumParser = EnumParser()
 PokemonId = EnumParser.parseEnumProto("https://raw.githubusercontent.com/Furtif/POGOProtos/master/base/base.proto",

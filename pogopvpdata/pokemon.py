@@ -3,7 +3,9 @@ import json
 import logging
 import os
 from math import sqrt, floor
-from . import logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class Pokemon():
