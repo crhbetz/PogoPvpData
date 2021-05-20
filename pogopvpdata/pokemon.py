@@ -153,6 +153,5 @@ class Pokemon():
                         'level': level
                     })
         self.products[limit].sort(reverse=True)
-        length = self.ranklength + 1
-        del self.products[limit][length:]
+        del self.products[limit][self.ranklength:]
         return highest, smallest

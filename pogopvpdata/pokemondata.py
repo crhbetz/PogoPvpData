@@ -2,7 +2,6 @@ import logging
 import time
 import requests
 from . import Pokemon, EnumParser
-from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -62,23 +61,29 @@ class PokemonData():
                     evolution = []
                     if "evolutionBranch" in moninfo:
                         try:
+                            count = 0
                             for evo in moninfo["evolutionBranch"]:
+                                params = {}
+                                params["count"] = count
+                                if "genderRequirement" in evo:
+                                    params["genderRequirement"] = evo["genderRequirement"]
                                 logger.debug(f"parsing evolution info {evo}")
                                 evoId = self.PokemonId[evo["evolution"]].value
                                 try:
                                     formId = self.Form[evo["form"]].value
                                 except Exception:
                                     try:
-                                        formId = self.Form["{}_NORMAL".format(evo["evolution"])].value  
+                                        formId = self.Form["{}_NORMAL".format(evo["evolution"])].value
                                     except Exception:
                                         logger.debug(f"fallback to formId 0 for evolution {evoId}")
                                         formId = 0
-                                evolution.append("{}-{}".format(evoId, formId))
+                                evolution.append(("{}-{}".format(evoId, formId), params))
+                                count += 1
                         except KeyError as e:
                             logger.debug(f"keyerror parsing evolution info: {e}")
                             evolution = []
                     else:
-                        logger.debug(f"no evolution info found")
+                        logger.debug("no evolution info found")
 
                     form = 0
                     if "form" in moninfo:
@@ -153,17 +158,36 @@ class PokemonData():
                              "the dev :)")
             return False
 
-    def getAllEvolutions(self, mon, form):
+    def getAllEvolutions(self, mon, form, gender=None):
         allEvolutions = []
+        logger.debug(f"passed gender {gender} to getAllEvolutions")
         try:
             nextEvolution = self.getPokemonObject(mon, form).getEvolution()
         except Exception:
             nextEvolution = False
         while nextEvolution:
             for evolution in nextEvolution:
+                if gender and "genderRequirement" in evolution[1]:
+                    parsedRequirements = True
+                    logger.debug(f"evaluating mon gender {gender} against genderRequirement "
+                                 f"{evolution[1]['genderRequirement']}")
+                    if ((evolution[1]["genderRequirement"] == "MALE" and gender != 1)
+                            or (evolution[1]["genderRequirement"] == "FEMALE" and gender != 2)):
+                        logger.debug(f"skip evolution {evolution} because of failed gender requirement.")
+                        continue
+                else:
+                    parsedRequirements = False
                 allEvolutions.append(evolution)
-                furtherEvolutions = self.getAllEvolutions(evolution.split("-")[0], evolution.split("-")[1])
+                identifier = evolution[0] if type(evolution) is tuple else evolution
+                furtherEvolutions = self.getAllEvolutions(identifier.split("-")[0], identifier.split("-")[1],
+                                                          gender)
                 allEvolutions = allEvolutions + furtherEvolutions
+                # it seems the possible evolutions in game master are ordered and the first one meeting all criteria
+                # is the one that will be available in game - thus if we did not <continue> previously but parsed some
+                # requirements, we now found the primary evolution and have to skip possible others
+                if parsedRequirements:
+                    logger.debug("Found the evolution meeting additional requirements - skip others")
+                    break
             try:
                 nextEvolution = self.data[nextEvolution].getEvolution()
             except Exception:
@@ -207,7 +231,7 @@ class PokemonData():
         return (great_rating, great_id, great_cp, great_level, great_rank,
                 ultra_rating, ultra_id, ultra_cp, ultra_level, ultra_rank)
 
-    def getPoraclePvpInfo(self, mon, form, atk, de, sta, lvl):
+    def getPoraclePvpInfo(self, mon, form, atk, de, sta, lvl, gender=None):
         if form == 0:
             try:
                 form = self.Form["{}_NORMAL".format(self.PokemonId(str(mon)).name)].value
@@ -215,18 +239,23 @@ class PokemonData():
                 form = 0
         greatPayload = []
         ultraPayload = []
-        evolutions = [self.getUniqueIdentifier(mon, form), ] + self.getAllEvolutions(mon, form)
+        # evolution is a tuple containing a "mon-id" string as produced by getUniqueIdentifier
+        # and a dict of possible additional parameters
+        evolutions = [(self.getUniqueIdentifier(mon, form), {}), ] + self.getAllEvolutions(mon, form, gender)
 
+        logger.debug(f"Found possible evolutions: {evolutions}")
         for evolution in evolutions:
+            logger.debug(f"Getting data for evolution: {evolution}")
+            identifier = evolution[0] if type(evolution) is tuple else evolution
             grating, gid, gcp, glvl, grank, urating, uid, ucp, ulvl, urank = self.get_pvp_info(atk, de, sta, lvl,
-                                                                                               identifier=evolution)
+                                                                                               identifier=identifier)
             if grank < 4096:
                 greatPayload.append(
                     {
                         'rank': grank,
                         'percentage': round(grating, 3),
-                        'pokemon': evolution.split("-")[0],
-                        'form': evolution.split("-")[1],
+                        'pokemon': identifier.split("-")[0],
+                        'form': identifier.split("-")[1],
                         'level': glvl,
                         'cp': gcp
                     })
@@ -235,8 +264,8 @@ class PokemonData():
                     {
                         'rank': urank,
                         'percentage': round(urating, 3),
-                        'pokemon': evolution.split("-")[0],
-                        'form': evolution.split("-")[1],
+                        'pokemon': identifier.split("-")[0],
+                        'form': identifier.split("-")[1],
                         'level': ulvl,
                         'cp': ucp
                     })
