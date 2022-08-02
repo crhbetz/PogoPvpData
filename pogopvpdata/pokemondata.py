@@ -143,6 +143,10 @@ class PokemonData():
         return "{}-{}".format(mon, form)
 
     def getPokemonObject(self, mon, form):
+        # Spinda and Icognito ...
+        if int(mon) in [201, 327]:
+            form = 0
+
         identifier = self.getUniqueIdentifier(mon, form)
         if identifier in self.data:
             return self.data[identifier]
@@ -231,7 +235,36 @@ class PokemonData():
         return (great_rating, great_id, great_cp, great_level, great_rank,
                 ultra_rating, ultra_id, ultra_cp, ultra_level, ultra_rank)
 
+    def get_league_info(self, limit, atk, de, sta, lvl, monster=0, form=0, identifier=None):
+        logger.debug(f"get_league_info got level: {lvl}")
+        if identifier:
+            monster = identifier.split("-")[0]
+            form = identifier.split("-")[1]
+        elif monster != 0 and form != 0:
+            pass
+        else:
+            return False, False, False, False, False
+
+        mondata = self.getPokemonObject(monster, form)
+
+        if not mondata:
+            logger.debug("did not get mondata, return zeroes")
+            return 0, 0, 0, 0, 4096
+
+        lvl = float(lvl)
+        perfect, _ = mondata.getSpreads(limit)
+        perfect_product = perfect["product"]
+
+        product, cp, level, rank = mondata.pokemon_rating(limit, atk, de, sta, lvl)
+        rating = 100 * (product / perfect_product)
+        mid = monster
+
+        logger.debug(f"get_league_info returning for {monster}-{form} (identifier {identifier}) @{limit}: {(rating, mid, cp, level, rank)}")
+        return (rating, mid, cp, level, rank)
+
     def getPoraclePvpInfo(self, mon, form, atk, de, sta, lvl, gender=None):
+        # deprecated: poraclePvpInfo specific legacy method to return great league and ultra league data
+        # getPvpInfo is more flexible copy of this: accepting a single league limit as an argument
         if form == 0:
             try:
                 form = self.Form["{}_NORMAL".format(self.PokemonId(str(mon)).name)].value
@@ -270,3 +303,33 @@ class PokemonData():
                         'cp': ucp
                     })
         return greatPayload, ultraPayload
+
+    def getPvpInfo(self, mon, form, atk, de, sta, lvl, gender=None, limit=1500):
+        logger.debug(f"getPvpInfo {mon}-{form} for limit {limit} lvl: {lvl}")
+        if form == 0:
+            try:
+                form = self.Form["{}_NORMAL".format(self.PokemonId(str(mon)).name)].value
+            except KeyError:
+                form = 0
+        payload = []
+        # evolution is a tuple containing a "mon-id" string as produced by getUniqueIdentifier
+        # and a dict of possible additional parameters
+        evolutions = [(self.getUniqueIdentifier(mon, form), {}), ] + self.getAllEvolutions(mon, form, gender)
+
+        logger.debug(f"Found possible evolutions: {evolutions}")
+        for evolution in evolutions:
+            logger.debug(f"Getting data for evolution: {evolution}")
+            identifier = evolution[0] if type(evolution) is tuple else evolution
+            rating, pid, cp, rlvl, rank = self.get_league_info(limit, atk, de, sta, lvl, identifier=identifier)
+            if rank < 4096:
+                payload.append(
+                    {
+                        'rank': rank,
+                        'percentage': round(rating, 3),
+                        'pokemon': identifier.split("-")[0],
+                        'form': identifier.split("-")[1],
+                        'level': rlvl,
+                        'cp': cp
+                    })
+
+        return payload

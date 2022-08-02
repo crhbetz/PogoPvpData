@@ -24,9 +24,19 @@ class Pokemon():
             self.cp_multipliers = json.load(f)
 
         self.products = {}
-        self.greatPerfect, self.greatLowest = self._spreads(1500)
-        self.ultraPerfect, self.ultraLowest = self._spreads(2500)
+        self.spreads = {}
+        for limit in [500, 1500, 2500]:
+            self._add_spreads_if_not_exist(limit)
+        # define legacy properties
+        self.greatPerfect, self.greatLowest = self.spreads[1500]["perfect"], self.spreads[1500]["lowest"]
+        self.ultraPerfect, self.ultraLowest = self.spreads[2500]["perfect"], self.spreads[2500]["lowest"]
         logger.debug("Pokemon {}, form {} initialized".format(self.num, self.form))
+
+    def _add_spreads_if_not_exist(self, limit):
+        if not limit in self.spreads:
+            self.spreads[limit] = {}
+            self.spreads[limit]["perfect"], self.spreads[limit]["lowest"] = self._calc_spreads(limit)
+        return True
 
     def num(self):
         return int(self.num)
@@ -56,7 +66,16 @@ class Pokemon():
         else:
             return False
 
+    def getSpreads(self, limit):
+        if not isinstance(limit, int):
+            return False, False
+        self._add_spreads_if_not_exist(limit)
+        return self.spreads[limit]["perfect"], self.spreads[limit]["lowest"]
+
     def pokemon_rating(self, limit, atk, de, sta, lvl):
+        logger.debug(f"Get rating for {self.ident()} @{limit}, IV {atk}/{de}/{sta}@{lvl}")
+        # make sure data for the specified limit is calculated
+        self._add_spreads_if_not_exist(limit)
         highest_rating = 0
         highest_cp = 0
         highest_level = 0
@@ -103,7 +122,7 @@ class Pokemon():
             if self.calculate_cp(15, 15, 15, x) <= limit:
                 return max(x - 1, 1)
 
-    def _spreads(self, limit):
+    def _calc_spreads(self, limit):
         smallest = {"product": 999999999}
         highest = {"product": 0}
         if limit not in self.products:

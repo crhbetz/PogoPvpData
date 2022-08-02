@@ -37,7 +37,7 @@ if __name__ == "__main__":
     custom_values = False
     if len(sys.argv) > 1:
         try:
-            mon, form, atk, de, sta, lvl, gender = [int(x) for x in sys.argv[1:8]]
+            mon, form, atk, de, sta, lvl, gender, limit = [int(x) for x in sys.argv[1:9]]
             custom_values = True
         except Exception as e:
             logger.warning(f"Parsing error: {e}")
@@ -59,8 +59,8 @@ if __name__ == "__main__":
     # getPoraclePvpInfo(self, mon, form, atk, de, sta, lvl)
     if not custom_values:
         logger.info("To run a custom test, pass the following values as arguments, separated by spaces: mon_id, "
-                    "form_id, attack_iv, defense_iv, stamina_iv, level, gender. Example of the default test of"
-                    "genderless Bulbasaur: python test.py 1 163 0 14 11 2 0")
+                    "form_id, attack_iv, defense_iv, stamina_iv, level, gender, limit. Example of the test of"
+                    "genderless Bulbasaur in Great League: python test.py 1 163 0 14 11 2 0 1500")
 
         for test in tests:
             result = data.getPoraclePvpInfo(*test["values"])
@@ -71,7 +71,7 @@ if __name__ == "__main__":
                 logger.warning(f"{test['name']} test received unexpected result!")
     else:
         gender = None if gender not in [1, 2, 3] else gender
-        custom_test = data.getPoraclePvpInfo(mon, form, atk, de, sta, lvl, gender)
+        custom_test = data.getPvpInfo(mon, form, atk, de, sta, lvl, gender, limit)
         logger.info(f"Custom test result: {custom_test}")
 
     try:
